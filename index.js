@@ -1,79 +1,33 @@
 const { response } = require('express');
+require('dotenv').config()
 const express = require('express');
 const app = express();
+const Person = require('./models/persons')
 const cors =  require('cors');
 
 app.use(express.json())
 app.use(cors())
 app.use(express.static('build'))
 
-let persons = [
-    {
-      id: 1,
-      name: "Hari",
-      email: "harisingh123@gmail.com",
-      salary: 32000,
-      designation: "chief operator"
-    },
-    {
-      name: "akash",
-      email: "akashsharma.zak@gmail.com",
-      salary: 17000,
-      designation: "Graphic designer",
-      id: 4
-    },
-    {
-      name: "nishi",
-      email: "betripelti@vusra.com",
-      salary: 15235,
-      designation: "Civil Engineer",
-      id: 6
-    },
-    {
-      name: "mamta",
-      email: "mamtasad751@gmail.com",
-      salary: 30000,
-      designation: "Doctor",
-      id: 7
-    },
-    {
-      name: "prasad",
-      email: "cunehapu@norwegischlernen.info",
-      salary: 30000,
-      designation: "Photographer",
-      id: 8
-    },
-    {
-      name: "tribhuvan",
-      email: "jigiy21163@luxiu2.com",
-      salary: 35000,
-      designation: "Civil Engineer",
-      id: 9
-    }
-]
-
-app.get('/api/persons', (req, res) => {
-    res.json(persons)
+app.get('/api/persons', (req, res, next) => {
+    Person.find({})
+        .then(obj => res.json(obj))
+        .catch(error => next(error))
 })
 
-app.get('/api/persons/:id', (req, res) => {
-    const id = Number(req.params.id)
-    const person = persons.find(person => person.id === id)
-    if (person) {
-        res.json(person)
-      } else {
-        res.status(404).end()
-      }
+app.get('/api/persons/:id', (req, res, next) => {
+    Person.findById(req.params.id)
+        .then(person => {
+        if (person) {
+            res.json(person)
+          } else {
+            res.status(404).end()
+          }
+    })
+    .catch(error => next(error))
 })
 
-const generateId = () => {
-    const maxId = persons.length > 0 
-        ? Math.max(...persons.map(p => p.id)) 
-        : 0
-    return maxId + 1
-}
-
-app.post('/api/persons', (req, res) => {
+app.post('/api/persons', (req, res, next) => {
     const body = req.body;
 
     if(!body.name || !body.email || !body.salary || !body.designation){
@@ -82,23 +36,59 @@ app.post('/api/persons', (req, res) => {
           })
     }
 
+    const person = new Person({
+        name: body.name,
+        email: body.email,
+        salary: body.salary,
+        designation: body.designation
+    })
+
+    person.save().then(savedPerson => {
+        res.json(savedPerson)
+    })
+    .catch(error => next(error))
+})
+
+app.put('/api/persons/:id', (req, res, next) => {
+    const body = req.body;
     const person = {
         name: body.name,
         email: body.email,
         salary: body.salary,
-        designation: body.designation,
-        id: generateId()
+        designation: body.designation
     }
 
-    persons = persons.concat(person)
-    res.json(person)
+    Person.findByIdAndUpdate(req.params.id, person, { new: true })
+        .then(updatedPerson => res.json(updatedPerson))
+        .catch(error => next(error))
 })
 
-app.delete('/api/persons/:id', (req, res) => {
-    const id = Number(req.params.id);
-    persons = persons.filter(person => person.id !== id);
-    res.status(204).end()
+app.delete('/api/persons/:id', (req, res, next) => {
+    Person.findByIdAndRemove(req.params.id)
+            .then((result) => res.status(204).end())
+            .catch(error => next(error));
 })
+
+const unknownEndpoint = (req, res) => {
+    response.status(404).send({ error: 'unknown endpoint' })
+  }
+  
+app.use(unknownEndpoint)
+
+const errorHandler = (error, req, res, next) => {
+    console.error(error.message)
+  
+    if (error.name === 'CastError') {
+      return res.status(400).send({ error: 'malformatted id' })
+    } 
+    else if (error.name == 'ValidationError') {
+        return res.status(400).send({ error: error.message });
+    }
+  
+    next(error)
+  }
+  
+app.use(errorHandler)
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
